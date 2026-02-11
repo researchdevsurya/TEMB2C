@@ -1,0 +1,19 @@
+{
+    "name": "temb2c/app",
+    "description": "TEM Booking System",
+    "type": "project",
+    "require": {
+        "razorpay/razorpay": "^2.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "Temb2c\\App\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "surya sundar",
+            "email": "120566782+suryaofficial7@users.noreply.github.com"
+        }
+    ]
+}

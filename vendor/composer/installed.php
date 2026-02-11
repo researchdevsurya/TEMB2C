@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => 'temb2c/app',
+        'pretty_version' => '1.0.0+no-version-set',
+        'version' => '1.0.0.0',
+        'reference' => null,
+        'type' => 'project',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => true,
+    ),
+    'versions' => array(
+        'razorpay/razorpay' => array(
+            'pretty_version' => '2.9.2',
+            'version' => '2.9.2.0',
+            'reference' => 'c5cf59941eb2d888e80371328d932e6e8266d352',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../razorpay/razorpay',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'rmccue/requests' => array(
+            'pretty_version' => 'v2.0.17',
+            'version' => '2.0.17.0',
+            'reference' => '74d1648cc34e16a42ea25d548fc73ec107a90421',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../rmccue/requests',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'temb2c/app' => array(
+            'pretty_version' => '1.0.0+no-version-set',
+            'version' => '1.0.0.0',
+            'reference' => null,
+            'type' => 'project',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);
