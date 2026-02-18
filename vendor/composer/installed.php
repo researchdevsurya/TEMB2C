@@ -1,15 +1,24 @@
 <?php return array(
     'root' => array(
         'name' => 'temb2c/app',
-        'pretty_version' => '1.0.0+no-version-set',
-        'version' => '1.0.0.0',
-        'reference' => null,
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => '9fccea3b73fddf9ca1c1a3e4b618d53d0367a4ef',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
         'dev' => true,
     ),
     'versions' => array(
+        'phpmailer/phpmailer' => array(
+            'pretty_version' => 'v7.0.2',
+            'version' => '7.0.2.0',
+            'reference' => 'ebf1655bd5b99b3f97e1a3ec0a69e5f4cd7ea088',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../phpmailer/phpmailer',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
         'razorpay/razorpay' => array(
             'pretty_version' => '2.9.2',
             'version' => '2.9.2.0',
@@ -29,9 +38,9 @@
             'dev_requirement' => false,
         ),
         'temb2c/app' => array(
-            'pretty_version' => '1.0.0+no-version-set',
-            'version' => '1.0.0.0',
-            'reference' => null,
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => '9fccea3b73fddf9ca1c1a3e4b618d53d0367a4ef',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

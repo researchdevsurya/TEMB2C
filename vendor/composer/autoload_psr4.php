@@ -10,4 +10,5 @@ return array(
     'Temb2c\\App\\' => array($baseDir . '/src'),
     'Razorpay\\Tests\\' => array($vendorDir . '/razorpay/razorpay/tests'),
     'Razorpay\\Api\\' => array($vendorDir . '/razorpay/razorpay/src'),
+    'PHPMailer\\PHPMailer\\' => array($vendorDir . '/phpmailer/phpmailer/src'),
 );

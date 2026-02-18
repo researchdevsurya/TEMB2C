@@ -11,7 +11,17 @@ $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     try {
+        require_once 'security_helper.php';
+        $security = new SecurityHelper($pdo);
+        $ip = SecurityHelper::getClientIP();
+
+        // 1. Check Rate Limit
+        if (!$security->checkRateLimit($ip, 'login', 5, 15)) {
+            throw new Exception("Too many failed attempts. Please try again after 15 minutes.");
+        }
+
         $email = trim($_POST['email']);
+
         $password = $_POST['password'];
 
         $stmt = $pdo->prepare("SELECT * FROM students WHERE email=?");
@@ -19,8 +29,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($password, $user['password'])) {
+            $security->logFailure($ip, 'login');
             throw new Exception("Invalid email or password");
         }
+        
+        // 2. Clear attempts on success
+        $security->clearAttempts($ip, 'login');
+
 
         $_SESSION['student_id'] = $user['id'];
         $_SESSION['student_name'] = $user['username'];
@@ -38,102 +53,94 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
 <?php include 'header.php'; ?>
 <title>Login | TEM Academy</title>
-<style>
-  .login-blob {
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.25;
-    animation: blobFloat 8s ease-in-out infinite;
-  }
-  @keyframes blobFloat {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(30px, -20px) scale(1.05); }
-    66% { transform: translate(-20px, 15px) scale(0.95); }
-  }
-  .login-card {
-    animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-</style>
 </head>
 
-<body class="bg-gradient-auth min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-
-<!-- BLOBS -->
-<div class="login-blob w-96 h-96 bg-purple-500 -top-20 -left-20"></div>
-<div class="login-blob w-80 h-80 bg-indigo-400 bottom-10 right-10" style="animation-delay: 3s;"></div>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center px-4 font-[Inter]">
 
 <!-- BACK LINK -->
-<a href="index.php" class="fixed top-6 left-6 z-20 text-white/60 hover:text-white flex items-center gap-2 text-sm font-medium transition">
+<a href="index.php" class="fixed top-6 left-6 z-20 text-gray-500 hover:text-blue-600 flex items-center gap-2 text-sm font-medium transition">
   <i class="fas fa-arrow-left"></i> Home
 </a>
 
-<!-- LOGIN CARD -->
-<div class="login-card relative z-10 w-full max-w-md">
+<div class="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col md:flex-row animate-fade-in-up border border-gray-100">
 
-  <!-- LOGO -->
-  <div class="text-center mb-8">
-    <div class="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center mx-auto mb-4 border border-white/10">
-      <i class="fas fa-graduation-cap text-white text-2xl"></i>
-    </div>
-    <h1 class="text-2xl font-bold text-white">Welcome Back</h1>
-    <p class="text-white/50 text-sm mt-1">Sign in to your student account</p>
+  <!-- LEFT SIDE: BRANDING / INFO (Hidden on mobile) -->
+  <div class="hidden md:flex flex-col justify-center items-center w-5/12 bg-blue-600 p-10 text-white relative overflow-hidden">
+      <!-- Decorative circles -->
+      <div class="absolute top-[-10%] right-[-10%] w-60 h-60 rounded-full bg-white opacity-10 blur-3xl"></div>
+      <div class="absolute bottom-[-10%] left-[-10%] w-60 h-60 rounded-full bg-white opacity-10 blur-3xl"></div>
+      
+      <div class="relative z-10 text-center">
+          <div class="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner border border-white/30">
+              <i class="fas fa-graduation-cap text-3xl text-white"></i>
+          </div>
+          <h2 class="text-3xl font-bold mb-4">Welcome Back!</h2>
+          <p class="text-blue-100 text-sm leading-relaxed mb-6">
+              Sign in to continue your journey with TEM Academy. Access your dashboard, counselling sessions, and more.
+          </p>
+      </div>
   </div>
 
-  <!-- FORM CARD -->
-  <div class="bg-white/10 backdrop-blur-xl border border-white/15 rounded-2xl p-8 shadow-2xl">
+  <!-- RIGHT SIDE: FORM -->
+  <div class="w-full md:w-7/12 p-8 md:p-12 flex flex-col justify-center">
+    
+    <div class="text-center md:text-left mb-8">
+      <h1 class="text-2xl font-bold text-gray-900">Sign In</h1>
+      <p class="text-gray-500 text-sm mt-1">Enter your credentials to access your account</p>
+    </div>
 
     <?php if ($error): ?>
-    <div class="bg-red-500/15 border border-red-400/20 text-red-200 px-4 py-3 rounded-xl text-sm font-medium mb-5 flex items-center gap-2">
-      <i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?>
+    <div class="bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm font-medium mb-5 flex items-center gap-2">
+      <i class="fas fa-exclamation-circle text-red-500"></i> <?= htmlspecialchars($error) ?>
     </div>
     <?php endif; ?>
 
-    <form method="POST" onsubmit="showLoader()">
+    <form method="POST" onsubmit="showLoader()" class="space-y-5">
 
-      <div class="mb-5">
-        <label class="block text-white/70 text-sm font-semibold mb-2">Email Address</label>
+      <div>
+        <label class="block text-gray-700 text-xs font-semibold mb-1.5">Email Address</label>
         <div class="relative">
-          <i class="fas fa-envelope absolute left-4 top-1/2 -translate-y-1/2 text-white/30"></i>
-          <input id="email" name="email" type="email"  required
-                 placeholder="you@example.com"
-                 class="w-full bg-white/10 border border-white/15 text-white placeholder-white/30 rounded-xl py-3.5 pl-11 pr-4 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 outline-none transition">
+          <i class="fas fa-envelope absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+          <input id="email" name="email" type="email" required
+                 class="w-full bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 rounded-lg py-2.5 pl-11 pr-4 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition text-sm"
+                 placeholder="you@example.com">
         </div>
       </div>
 
-      <div class="mb-5">
-        <label class="block text-white/70 text-sm font-semibold mb-2">Password</label>
+      <div>
+        <label class="block text-gray-700 text-xs font-semibold mb-1.5">Password</label>
         <div class="relative">
-          <i class="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-white/30"></i>
+          <i class="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
           <input name="password" type="password" required
-                 placeholder="••••••••"
-                 class="w-full bg-white/10 border border-white/15 text-white placeholder-white/30 rounded-xl py-3.5 pl-11 pr-4 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 outline-none transition">
+                 class="w-full bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 rounded-lg py-2.5 pl-11 pr-4 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition text-sm"
+                 placeholder="••••••••">
         </div>
       </div>
 
-      <label class="flex items-center gap-2 mb-6 cursor-pointer">
-        <input type="checkbox" id="remember" class="w-4 h-4 rounded border-white/20 bg-white/10 text-indigo-500 focus:ring-indigo-400">
-        <span class="text-white/50 text-sm">Remember my email</span>
-      </label>
+      <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="remember" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+            <span class="text-gray-500 text-sm">Remember me</span>
+        </label>
+        <a href="forgot_password.php" class="text-sm text-blue-600 hover:text-blue-700 font-medium hover:underline">Forgot Password?</a>
+      </div>
 
-      <button id="loginBtn" class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all flex items-center justify-center gap-2">
+      <button id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2">
         <span id="btnText">Sign In</span>
         <span id="btnSpinner" class="hidden"><span class="spinner"></span></span>
         <i id="btnArrow" class="fas fa-arrow-right text-sm"></i>
       </button>
 
     </form>
-  </div>
 
-  <!-- FOOTER -->
-  <p class="text-center text-white/40 text-sm mt-6">
-    Don't have an account?
-    <a href="signup.php" class="text-indigo-300 font-semibold hover:text-indigo-200 transition">Create here</a>
-  </p>
+    <div class="text-center mt-8">
+      <p class="text-gray-500 text-sm">
+        Don't have an account?
+        <a href="signup.php" class="text-blue-600 font-bold hover:text-blue-700 transition underline decoration-2 decoration-transparent hover:decoration-blue-600">Create Account</a>
+      </p>
+    </div>
+
+  </div>
 
 </div>
 
@@ -156,8 +163,11 @@ function showLoader(){
     document.getElementById("btnText").textContent = "Signing in...";
     document.getElementById("btnArrow").classList.add("hidden");
     document.getElementById("btnSpinner").classList.remove("hidden");
-    document.getElementById("loginBtn").disabled = true;
-    document.getElementById("loginBtn").classList.add("opacity-80");
+    
+    // Add disabled state visual
+    const btn = document.getElementById("loginBtn");
+    btn.disabled = true;
+    btn.classList.add("opacity-75", "cursor-not-allowed");
 }
 </script>
 

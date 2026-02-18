@@ -3,7 +3,8 @@
     "description": "TEM Booking System",
     "type": "project",
     "require": {
-        "razorpay/razorpay": "^2.9"
+        "razorpay/razorpay": "^2.9",
+        "phpmailer/phpmailer": "^7.0"
     },
     "autoload": {
         "psr-4": {
