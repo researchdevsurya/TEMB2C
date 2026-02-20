@@ -5,9 +5,9 @@
  */
 
 /* ─── Razorpay ─── */
-define('RZP_KEY_ID',     'rzp_test_SDwKTskm09k6GX');
-define('RZP_KEY_SECRET', '5o7G2ENkl3wE3EUUSb3CKD9v');
-define('RZP_WEBHOOK_SECRET', 'YOUR_WEBHOOK_SECRET_HERE'); // set in Razorpay Dashboard → Webhooks
+define('RAZORPAY_KEY_ID',     'rzp_test_SDwKTskm09k6GX');
+define('RAZORPAY_KEY_SECRET', '5o7G2ENkl3wE3EUUSb3CKD9v');
+define('RAZORPAY_WEBHOOK_SECRET', 'YOUR_WEBHOOK_SECRET_HERE'); // set in Razorpay Dashboard → Webhooks
 
 /* ─── Session Fee Amounts (INR) ─── */
 define('FEE_PSYCHOMETRIC', 999);

@@ -310,9 +310,7 @@ document.getElementById('streamSelect').addEventListener('change', function() {
   specSelect.innerHTML = '<option value="">Select Specialization</option>';
 
   const map = {
-    Science: ['Engineering', 'Medical', 'Pure Science', 'Others'],
-    Commerce: ['CA', 'CS', 'CMA', 'Business', 'Others'],
-    Arts: ['Humanities', 'Design', 'Law', 'Others']
+    Science: ['Engineering', 'Medical', 'Pure Science', 'Others']
   };
 
   if (map[this.value]) {

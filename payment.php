@@ -1,254 +1,312 @@
 <?php
-/**
- * Payment – Create Razorpay Subscription + e-Mandate
- * 
- * Flow: Student completes booking → redirected here → Razorpay Subscription
- * created → Checkout opens → Student authorizes mandate → redirect to
- * subscription_success.php
- */
+
+require 'vendor/autoload.php';
+
+
 session_start();
 require 'db.php';
-require __DIR__ . '/vendor/autoload.php';
-require __DIR__ . '/config.php';
+
+// if (isset($_SESSION['student_id'])) {
+//     header("Location: dashboard.php");
+//     exit;
+// }
+require 'config.php'; // contains DB + Razorpay keys
+
 
 use Razorpay\Api\Api;
 
-if (!isset($_SESSION['student_id'])) {
-    header("Location: login.php");
+if (!isset($_GET['booking_id'])) {
+    die("Invalid request");
+}
+
+$booking_id = (int)$_GET['booking_id'];
+
+$api = new Api(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET);
+
+/* ─────────────────────────────────────────
+   STEP 1: Fetch Booking + Student Info
+─────────────────────────────────────────── */
+
+$stmt = $pdo->prepare("
+    SELECT sb.*, s.username, s.email, s.contact_number, s.razorpay_customer_id
+    FROM student_bookings sb
+    inner JOIN students s ON sb.student_id = s.id
+    WHERE sb.id = ?
+");
+$stmt->execute([$booking_id]);
+$booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$booking) {
+    die("Booking not found");
+}
+
+if ($booking['subscription_status'] === 'active') {
+    header("Location: schedule.php");
     exit;
 }
 
-$booking_id = $_GET['booking_id'] ?? die("Invalid booking");
-
-/* FETCH BOOKING */
-$stmt = $pdo->prepare("SELECT sb.*, s.email, s.contact_number, s.username 
-                        FROM student_bookings sb 
-                        JOIN students s ON s.id = sb.student_id 
-                        WHERE sb.id=? AND sb.student_id=?");
-$stmt->execute([$booking_id, $_SESSION['student_id']]);
-$booking = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$booking) die("Booking not found");
-
-$api = new Api(RZP_KEY_ID, RZP_KEY_SECRET);
-
-/* ─── STEP 1: Create Razorpay Customer (if not exists) ─── */
 $customerId = $booking['razorpay_customer_id'];
 
-if (!$customerId) {
-    $customer = $api->customer->create([
-        'name'    => $booking['username'],
-        'email'   => $booking['email'],
-        'contact' => $booking['contact_number'],
-        'notes'   => ['student_id' => $booking['student_id']]
-    ]);
-    $customerId = $customer['id'];
+/* ─────────────────────────────────────────
+   STEP 2: Create / Fetch Razorpay Customer
+─────────────────────────────────────────── */
 
-    $pdo->prepare("UPDATE student_bookings SET razorpay_customer_id=? WHERE id=?")
-        ->execute([$customerId, $booking_id]);
-}
+if (empty($customerId)) {
 
-/* ─── STEP 2: Create Razorpay Plan (or use existing) ─── */
-// We create a Plan programmatically for this booking's total.
-// Each session = 1 charge cycle. Total 3 sessions after booking:
-//   Psychometric (₹799) + Group (₹799) + One-to-One (₹1000)
-// BUT Razorpay Plans have fixed amount per cycle.
-// Strategy: Create a subscription with the token amount for authorization,
-// then use the recurring token to charge per-session amounts via auto_debit.
-//
-// Alternative: Use Razorpay's e-mandate with "token" payment method.
-// We'll create an order with recurring flag for mandate registration.
+    try {
 
-/* ─── STEP 2: Create auth order for e-mandate ─── */
-$tokenAmount = FEE_TOKEN * 100; // ₹1 in paise
-
-$order = $api->order->create([
-    'amount'          => $tokenAmount,
-    'currency'        => 'INR',
-    'receipt'         => 'MANDATE_' . $booking_id . '_' . time(),
-    'payment_capture' => 1,
-    'notes'           => [
-        'booking_id' => $booking_id,
-        'student_id' => $booking['student_id'],
-        'purpose'    => 'e-mandate authorization'
-    ]
-]);
-
-$order_id = $order['id'];
-
-/* ─── STEP 3: Save order + customer to booking ─── */
-$pdo->prepare("
-    UPDATE student_bookings
-    SET txnid=?, amount=?, razorpay_customer_id=?, subscription_status='created'
-    WHERE id=?
-")->execute([$order_id, FEE_TOKEN, $customerId, $booking_id]);
-
-/* ─── STEP 4: Create pending payment records for all sessions ─── */
-$sessions = [
-    ['type' => 'PSYCHOMETRIC', 'date' => $booking['selected_psychometric_date'], 'amount' => FEE_PSYCHOMETRIC],
-    ['type' => 'GROUP',        'date' => $booking['group_session1_date'],         'amount' => FEE_GROUP],
-    ['type' => 'ONE_TO_ONE',   'date' => $booking['booked_date'],                 'amount' => FEE_ONE_TO_ONE],
-];
-
-foreach ($sessions as $sess) {
-    // Check if payment already exists
-    $chk = $pdo->prepare("SELECT id FROM payments WHERE booking_id=? AND payment_for=?");
-    $chk->execute([$booking_id, $sess['type']]);
-    if ($chk->rowCount() == 0) {
-        $pdo->prepare("
-            INSERT INTO payments (booking_id, student_id, payment_for, amount, scheduled_date, auto_pay)
-            VALUES (?,?,?,?,?,?)
-        ")->execute([
-            $booking_id,
-            $booking['student_id'],
-            $sess['type'],
-            $sess['amount'],
-            $sess['date'],
-            'YES'
+        $customer = $api->customer->create([
+            'name'    => $booking['username'],
+            'email'   => $booking['email'],
+            'contact' => $booking['contact_number'],
+            'notes'   => [
+                'student_id' => $booking['student_id']
+            ]
         ]);
+
+        $customerId = $customer['id'];
+
+        // Save in students table
+        $pdo->prepare("
+            UPDATE students
+            SET razorpay_customer_id = ?
+            WHERE id = ?
+        ")->execute([$customerId, $booking['student_id']]);
+
+    } catch (Exception $e) {
+
+        if (strpos($e->getMessage(), 'already exists') !== false) {
+
+            $customers = $api->customer->all([
+                'email' => $booking['email']
+            ]);
+
+            if (!empty($customers['items'])) {
+
+                $customerId = $customers['items'][0]['id'];
+
+                $pdo->prepare("
+                    UPDATE students
+                    SET razorpay_customer_id = ?
+                    WHERE id = ?
+                ")->execute([$customerId, $booking['student_id']]);
+
+            } else {
+                die("Customer error: " . $e->getMessage());
+            }
+
+        } else {
+            die("Customer creation failed: " . $e->getMessage());
+        }
     }
 }
 
-/* ─── LOG ─── */
-$pdo->prepare("
-    INSERT INTO payment_logs (booking_id, student_id, razorpay_order_id, payment_type, event_type, raw_payload, status)
-    VALUES (?,?,?,?,?,?,?)
-")->execute([
-    $booking_id,
-    $booking['student_id'],
-    $order_id,
-    'TOKEN',
-    'order.created',
-    json_encode(['order' => $order->toArray(), 'customer_id' => $customerId]),
-    'INITIATED'
-]);
+/* ─────────────────────────────────────────
+   STEP 3: Create Order (Refresh Safe)
+─────────────────────────────────────────── */
+
+$tokenAmount = 100; // ₹1 mandate test amount (100 paise)
+
+if (!empty($booking['txnid'])) {
+
+    $order_id = $booking['txnid'];
+
+} else {
+
+    try {
+
+        $order = $api->order->create([
+            'amount'          => $tokenAmount,
+            'currency'        => 'INR',
+            'receipt'         => 'MANDATE_' . $booking_id . '_' . time(),
+            'payment_capture' => 1,
+            'notes'           => [
+                'booking_id' => $booking_id,
+                'student_id' => $booking['student_id'],
+                'purpose'    => 'e-mandate authorization'
+            ]
+        ]);
+
+        $order_id = $order['id'];
+
+        $pdo->prepare("
+            UPDATE student_bookings
+            SET txnid = ?, razorpay_customer_id = ?, subscription_status='created'
+            WHERE id = ?
+        ")->execute([$order_id, $customerId, $booking_id]);
+
+    } catch (Exception $e) {
+        die("Order creation failed: " . $e->getMessage());
+    }
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Complete Payment | TEM Academy</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
-    .loading-pulse { animation: pulse 2s ease-in-out infinite; }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-</style>
+    <?php include 'header.php'; ?>
+    <title>Complete Payment | TEM Portal</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        .pay-illustration {
+            width: 120px;
+            height: 120px;
+            background: rgba(99, 102, 241, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+        }
+        .pay-illustration i {
+            font-size: 3rem;
+            color: var(--primary-600);
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 min-h-screen flex items-center justify-center">
+<body class="bg-gradient-page">
 
-<div class="max-w-md w-full mx-4">
-    <div class="bg-white rounded-2xl shadow-xl p-8 text-center" id="paymentCard">
-        <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i class="fas fa-shield-alt text-indigo-600 text-2xl"></i>
+<?php include 'sidebar.php'; ?>
+
+<main class="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+
+    <div class="glass-card p-8 sm:p-12 text-center animate-fade-in-up">
+        
+        <div class="pay-illustration">
+            <i class="fas fa-file-signature"></i>
         </div>
-        <h2 class="text-xl font-bold text-gray-800 mb-2">Setup Auto-Pay Mandate</h2>
-        <p class="text-gray-500 text-sm mb-6">
-            A ₹<?= FEE_TOKEN ?> authorization charge will set up auto-pay for your sessions.
-            Future payments will be deducted automatically before each session.
+
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Authorize Auto-Debit</h2>
+        <p class="text-gray-500 mb-8 max-w-md mx-auto">
+            To confirm your booking, please authorize the e-mandate. 
+            A token amount of <strong>₹<?= number_format($tokenAmount / 100, 2) ?></strong> will be charged.
         </p>
 
-        <div class="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-            <p class="text-xs text-gray-400 uppercase font-semibold mb-3">Session Fees</p>
-            <div class="space-y-2 text-sm">
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Psychometric Test</span>
-                    <span class="font-bold text-gray-800">₹<?= FEE_PSYCHOMETRIC ?></span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Group Session</span>
-                    <span class="font-bold text-gray-800">₹<?= FEE_GROUP ?></span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">1:1 Counselling</span>
-                    <span class="font-bold text-gray-800">₹<?= FEE_ONE_TO_ONE ?></span>
-                </div>
-                <div class="border-t pt-2 mt-2 flex justify-between">
-                    <span class="text-gray-600 font-semibold">Auth Charge Now</span>
-                    <span class="font-bold text-indigo-600">₹<?= FEE_TOKEN ?></span>
-                </div>
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 text-left max-w-sm mx-auto">
+            <div class="flex justify-between mb-2">
+                <span class="text-gray-500 text-sm">Booking ID</span>
+                <span class="font-semibold text-gray-800">#<?= $booking_id ?></span>
+            </div>
+            <div class="flex justify-between mb-2">
+                <span class="text-gray-500 text-sm">Student</span>
+                <span class="font-semibold text-gray-800"><?= htmlspecialchars($booking['username']) ?></span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-500 text-sm">Amount</span>
+                <span class="font-bold text-primary-600">₹<?= number_format($tokenAmount / 100, 2) ?></span>
             </div>
         </div>
 
-        <button onclick="openCheckout()" id="payBtn"
-                class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2">
-            <i class="fas fa-lock"></i> Authorize & Setup Auto-Pay
+        <button id="rzp-button1" class="btn-primary py-3 px-8 text-lg w-full sm:w-auto shadow-lg hover:shadow-xl transform transition hover:-translate-y-1">
+            <i class="fas fa-qrcode mr-2"></i> Pay with UPI / Card
         </button>
 
-        <p class="text-xs text-gray-400 mt-4">
-            <i class="fas fa-shield-alt"></i> Secured by Razorpay. Payments auto-deducted 1 day before each session.
+        <p class="text-xs text-gray-400 mt-6">
+            Secured by Razorpay. Use any UPI App (GooglePay, PhonePe, Paytm) to scan and pay.
         </p>
     </div>
-</div>
 
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</main>
+
 <script>
-function openCheckout() {
+function openPay() {
+
     var options = {
-        key: "<?= RZP_KEY_ID ?>",
-        amount: "<?= $tokenAmount ?>",
+        key: "<?= RAZORPAY_KEY_ID ?>",
+        amount: "<?= $tokenAmount ?>", // 100 paise (₹1)
         currency: "INR",
-        name: "TEM Academy",
-        description: "Auto-Pay Mandate Setup",
+        name: "TEM Portal",
+        description: "E-Mandate Authorization",
+        image: "https://yourdomain.com/logo.png", 
         order_id: "<?= $order_id ?>",
         customer_id: "<?= $customerId ?>",
+        recurring: true,
+
+        // Enable ALL payment methods
+        method: {
+            upi: true,
+            card: true,
+            netbanking: true,
+            wallet: true,
+            emi: true
+        },
+
+        // Show UPI first with QR
+        config: {
+            display: {
+                blocks: {
+                    upi: {
+                        name: "Pay using UPI",
+                        instruments: [
+                            { method: "upi" }
+                        ]
+                    },
+                    card: {
+                        name: "Pay using Card",
+                        instruments: [
+                            { method: "card" }
+                        ]
+                    },
+                    netbanking: {
+                        name: "Netbanking",
+                        instruments: [
+                            { method: "netbanking" }
+                        ]
+                    }
+                },
+                sequence: ["block.upi", "block.card", "block.netbanking"],
+                preferences: {
+                    show_default_blocks: true
+                }
+            }
+        },
+
         prefill: {
             name: "<?= htmlspecialchars($booking['username']) ?>",
             email: "<?= htmlspecialchars($booking['email']) ?>",
             contact: "<?= htmlspecialchars($booking['contact_number']) ?>"
         },
-        recurring: "1",
+
         notes: {
             booking_id: "<?= $booking_id ?>",
-            purpose: "e-mandate authorization"
+            purpose: "mandate"
         },
+
         theme: {
             color: "#6366f1"
         },
-        handler: function(response) {
-            // Redirect to success handler
-            var form = document.createElement("form");
-            form.method = "POST";
-            form.action = "subscription_success.php";
-            
-            var fields = {
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-                booking_id: "<?= $booking_id ?>"
-            };
 
-            for (var key in fields) {
-                var input = document.createElement("input");
-                input.type = "hidden";
-                input.name = key;
-                input.value = fields[key];
-                form.appendChild(input);
-            }
-
-            document.body.appendChild(form);
-            form.submit();
+        handler: function (response) {
+            window.location.href =
+                "mandate_success.php?booking_id=<?= $booking_id ?>" +
+                "&payment_id=" + response.razorpay_payment_id +
+                "&order_id=" + response.razorpay_order_id +
+                "&signature=" + response.razorpay_signature;
         },
+
         modal: {
-            ondismiss: function() {
-                document.getElementById('payBtn').textContent = 'Try Again';
+            confirm_close: true,
+            ondismiss: function () {
+                console.log("Payment popup closed");
             }
         }
     };
 
-    new Razorpay(options).open();
+    var rzp = new Razorpay(options);
+    rzp.open();
 }
 
-// Auto-open checkout
-window.onload = function() {
-    setTimeout(openCheckout, 500);
+// Auto open on load
+window.onload = function () {
+    setTimeout(openPay, 500);
 };
+
+document.getElementById('rzp-button1').onclick = function(e){
+    openPay();
+    e.preventDefault();
+}
 </script>
 
+<?php include 'footer.php'; ?>
 </body>
 </html>

@@ -108,13 +108,15 @@ if ($_SERVER['REQUEST_METHOD'] === "POST" && !$alreadyBooked) {
                 $slotRow['id']
             ]);
 
+            $bookingId = $pdo->lastInsertId();
+
             // Mark counsellor slot as booked
             $upd = $pdo->prepare("UPDATE counsellor_slots SET booked=1 WHERE id=?");
             $upd->execute([$slotRow['id']]);
 
             $pdo->commit();
 
-            header("Location: payment.php?booking_id=" . $pdo->lastInsertId());
+            header("Location: payment.php?booking_id=" . $bookingId);
             exit;
 
         } catch (Exception $e) {

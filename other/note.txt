@@ -1,0 +1,56 @@
+You are a senior DevOps architect and backend performance engineer.
+
+I am building a PHP-based web application that will be used by 3000–4000 students. 
+I need you to design a complete automation and infrastructure setup to prevent crashes under concurrent usage.
+
+Project Context:
+- Backend: PHP (core PHP or Laravel)
+- Database: MySQL
+- Hosting: VPS (Linux)
+- Expected peak users: 500–1200 simultaneous active users
+- Features: login system, dashboard, CRUD operations, possible exam/result time traffic spikes
+
+Your Task:
+
+1. Design a production-ready server architecture.
+2. Recommend:
+   - Web server (Apache vs Nginx)
+   - PHP-FPM configuration
+   - MySQL optimization settings
+   - Redis caching strategy
+   - Load balancing (if needed)
+3. Provide automation scripts for:
+   - Server provisioning
+   - Nginx + PHP setup
+   - MySQL tuning
+   - Enabling OPcache
+   - Gzip & static caching
+4. Provide load testing plan:
+   - Tools to simulate 200–500 concurrent users
+   - Example test scripts
+5. Add monitoring & crash prevention:
+   - Log monitoring
+   - CPU & RAM monitoring
+   - Auto-restart strategy
+6. Add security hardening:
+   - Rate limiting
+   - Fail2ban
+   - Firewall setup
+   - Basic DDoS mitigation
+7. Provide recommended VPS specs for:
+   - Small load
+   - Medium load
+   - Exam-time heavy load
+
+Output format:
+- Clear architecture diagram (text format)
+- Configuration file examples
+- Bash automation scripts
+- Performance tuning values
+- Final checklist before production launch
+
+Important:
+Assume I am deploying on Ubuntu 22.04.
+Focus on stability and concurrency safety.
+Avoid overengineering unless truly needed.
+Keep solution cost-effective.

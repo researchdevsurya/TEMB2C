@@ -26,7 +26,7 @@ $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$booking) die("Booking not found");
 
-$api = new Api(RZP_KEY_ID, RZP_KEY_SECRET);
+$api = new Api(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET);
 
 try {
     /* If there's a subscription, cancel it */

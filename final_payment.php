@@ -52,7 +52,7 @@ if ($existingRow) {
     $payment_id = $pdo->lastInsertId();
 }
 
-$api = new Api(RZP_KEY_ID, RZP_KEY_SECRET);
+$api = new Api(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET);
 
 /* CREATE ORDER */
 $order = $api->order->create([
@@ -122,7 +122,7 @@ $sessionLabel = match($type) {
 <script>
 function openPay() {
     new Razorpay({
-        key: "<?= RZP_KEY_ID ?>",
+        key: "<?= RAZORPAY_KEY_ID ?>",
         amount: "<?= $amount * 100 ?>",
         currency: "INR",
         name: "TEM Academy",

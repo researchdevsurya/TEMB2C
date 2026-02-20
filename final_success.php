@@ -11,7 +11,7 @@ require __DIR__ . '/mail_helper.php';
 use Razorpay\Api\Api;
 use Razorpay\Api\Errors\SignatureVerificationError;
 
-$api = new Api(RZP_KEY_ID, RZP_KEY_SECRET);
+$api = new Api(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET);
 
 $razorpayOrderId   = $_POST['razorpay_order_id']   ?? null;
 $razorpayPaymentId = $_POST['razorpay_payment_id'] ?? null;

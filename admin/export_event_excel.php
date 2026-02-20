@@ -17,7 +17,13 @@ if(isset($_POST['event_id'])){
     $stmt->execute([$event_id]);
     $event = $stmt->fetch();
 
-    $filename = "TEM_Event_" . preg_replace('/\s+/','_',$event['event_name']) . "_Full_Report.csv";
+    if(!$event){
+        $_SESSION['error_msg'] = "Event not found.";
+        header("Location: export_event_excel.php");
+        exit;
+    }
+
+    $filename = "TEM_Event_" . preg_replace('/\s+/', '_', $event['event_name']) . "_Full_Report.csv";
 
     header("Content-Type: text/csv");
     header("Content-Disposition: attachment; filename=$filename");
@@ -31,6 +37,9 @@ if(isset($_POST['event_id'])){
         'Contact Number',
         'Gender',
         'Class',
+        'Board',
+        'Stream',
+        'Specialization',
         'School Name',
         'Date of Birth',
         'Address',
@@ -59,7 +68,10 @@ if(isset($_POST['event_id'])){
             s.email,
             s.contact_number,
             s.gender,
-            s.std,
+            s.std as s_std,
+            s.board as s_board,
+            s.stream as s_stream,
+            s.specialization as s_specialization,
             s.school_name,
             s.dob,
             s.address,
@@ -73,27 +85,22 @@ if(isset($_POST['event_id'])){
     $stmt->execute([$event_id]);
 
     while($row = $stmt->fetch(PDO::FETCH_ASSOC)){
-
-        /* MAP SESSION1 DATE */
-        $s1_date = '';
-        if($row['group_session1'] == $event['block1_session1']) $s1_date = $event['block1_date1'];
-        elseif($row['group_session1'] == $event['block1_session2']) $s1_date = $event['block1_date2'];
-        elseif($row['group_session1'] == $event['block2_session1']) $s1_date = $event['block2_date1'];
-        elseif($row['group_session1'] == $event['block2_session2']) $s1_date = $event['block2_date2'];
-
-        /* MAP SESSION2 DATE */
-        $s2_date = '';
-        if($row['group_session2'] == $event['block1_session1']) $s2_date = $event['block1_date1'];
-        elseif($row['group_session2'] == $event['block1_session2']) $s2_date = $event['block1_date2'];
-        elseif($row['group_session2'] == $event['block2_session1']) $s2_date = $event['block2_date1'];
-        elseif($row['group_session2'] == $event['block2_session2']) $s2_date = $event['block2_date2'];
+        
+        // Use data from booking if available, otherwise fallback to student record
+        $class = $row['class_std'] ?: $row['s_std'];
+        $board = $row['board'] ?: $row['s_board'];
+        $stream = $row['stream'] ?: $row['s_stream'];
+        $spec = $row['specialization'] ?: $row['s_specialization'];
 
         fputcsv($output, [
             $row['username'],
             $row['email'],
             $row['contact_number'],
             $row['gender'],
-            $row['std'],
+            $class,
+            $board,
+            $stream,
+            $spec,
             $row['school_name'],
             $row['dob'],
             $row['address'],
@@ -102,10 +109,10 @@ if(isset($_POST['event_id'])){
             $row['selected_psychometric_date'],
 
             $row['group_session1'],
-            $s1_date,
+            $row['group_session1_date'],
 
             $row['group_session2'],
-            $s2_date,
+            $row['group_session2_date'],
 
             $row['booked_date'],
             $row['one_to_one_slot'],

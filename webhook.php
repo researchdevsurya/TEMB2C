@@ -31,7 +31,7 @@ if (!$payload || !isset($payload['event'])) {
 $webhookSignature = $_SERVER['HTTP_X_RAZORPAY_SIGNATURE'] ?? '';
 if (RZP_WEBHOOK_SECRET !== 'YOUR_WEBHOOK_SECRET_HERE' && $webhookSignature) {
     try {
-        $api = new Api(RZP_KEY_ID, RZP_KEY_SECRET);
+        $api = new Api(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET);
         $api->utility->verifyWebhookSignature($rawPayload, $webhookSignature, RZP_WEBHOOK_SECRET);
     } catch (Exception $e) {
         http_response_code(400);
